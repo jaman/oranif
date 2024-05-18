@@ -417,6 +417,7 @@ DPI_NIF_FUN(stmt_close)
         stmtRes->context,
         dpiStmt_close(stmtRes->stmt, (const char *)tag.data, tag.size),
         stmtRes, dpiStmt);
+        dpiStmt_release(stmtRes->stmt);
 
     RELEASE_RESOURCE(stmtRes, dpiStmt);
 
