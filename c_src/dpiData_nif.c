@@ -496,20 +496,18 @@ DPI_NIF_FUN(data_release)
 
     if (enif_get_resource(env, argv[0], dpiData_type, (void **)&res.dataRes))
     {
-        // nothing to set to NULL
-        RELEASE_RESOURCE(res.dataRes, dpiData);
+        // Nothing to do - let Erlang GC handle the resource lifecycle
     }
     else if (enif_get_resource(
                  env, argv[0], dpiDataPtr_type, (void **)&res.dataPtrRes))
     {
         if (res.dataPtrRes->stmtRes)
         {
-            RELEASE_RESOURCE(res.dataPtrRes->stmtRes, dpiStmt);
+            // Don't release stmtRes - it has its own Erlang term and will be GC'd independently
             res.dataPtrRes->stmtRes = NULL;
         }
         res.dataPtrRes->dpiDataPtr = NULL;
-        if (res.dataPtrRes->isQueryValue == 1)
-            RELEASE_RESOURCE(res.dataPtrRes, dpiDataPtr);
+        // Don't call RELEASE_RESOURCE - let Erlang GC handle the resource lifecycle
     }
     else
         BADARG_EXCEPTION(0, "resource data");

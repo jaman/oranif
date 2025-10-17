@@ -64,7 +64,10 @@ DPI_NIF_FUN(context_destroy)
     RAISE_EXCEPTION_ON_DPI_ERROR(
         contextRes->context, dpiContext_destroy(contextRes->context));
 
-    RELEASE_RESOURCE(contextRes, dpiContext);
+    contextRes->context = NULL;
+
+    // Don't call RELEASE_RESOURCE - let Erlang GC handle the resource lifecycle
+    // The destructor will be called when Erlang GCs the term
 
     RETURNED_TRACE;
     return ATOM_OK;

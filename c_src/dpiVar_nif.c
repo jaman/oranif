@@ -70,15 +70,14 @@ DPI_NIF_FUN(var_release)
 
     RAISE_EXCEPTION_ON_DPI_ERROR(vRes->context, dpiVar_release(vRes->var));
 
-    dpiDataPtr_res *t_itr;
-    for (dpiDataPtr_res *itr = vRes->head; itr != NULL;)
-    {
-        t_itr = itr;
-        itr = itr->next;
-        RELEASE_RESOURCE(t_itr, dpiDataPtr);
-    }
+    vRes->var = NULL;
 
-    RELEASE_RESOURCE(vRes, dpiVar);
+    // Clear the linked list - the dataPtr resources have their own Erlang terms
+    // and will be GC'd independently, so we just clear our internal tracking
+    vRes->head = NULL;
+
+    // Don't call RELEASE_RESOURCE on vRes - let Erlang GC handle the resource lifecycle
+    // The destructor will be called when Erlang GCs the term
 
     RETURNED_TRACE;
     return ATOM_OK;

@@ -330,9 +330,10 @@ DPI_NIF_FUN(conn_close)
         connRes->conn = NULL;
     }
 
-    RELEASE_RESOURCE(connRes, dpiConn);
+    // Don't call RELEASE_RESOURCE - let Erlang GC handle the resource lifecycle
+    // The destructor will be called when Erlang GCs the term
 
-    // Check for errors after cleanup to avoid double-free
+    // Check for errors after cleanup
     if (DPI_FAILURE == closeResult) {
         dpiErrorInfo __err;
         dpiContext_getError(connRes->context, &__err);
