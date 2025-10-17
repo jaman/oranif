@@ -6,6 +6,11 @@ ErlNifResourceType *dpiVar_type;
 void dpiVar_res_dtor(ErlNifEnv *env, void *resource)
 {
     CALL_TRACE;
+    dpiVar_res *varRes = (dpiVar_res *)resource;
+    if (varRes->var != NULL) {
+        dpiVar_release(varRes->var);
+        varRes->var = NULL;
+    }
     RETURNED_TRACE;
 }
 

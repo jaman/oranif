@@ -14,6 +14,11 @@ ErlNifResourceType *dpiConn_type;
 void dpiConn_res_dtor(ErlNifEnv *env, void *resource)
 {
     CALL_TRACE;
+    dpiConn_res *connRes = (dpiConn_res *)resource;
+    if (connRes->conn != NULL) {
+        dpiConn_release(connRes->conn);
+        connRes->conn = NULL;
+    }
     RETURNED_TRACE;
 }
 
@@ -103,6 +108,8 @@ DPI_NIF_FUN(conn_prepareStmt)
 
     if (!enif_get_resource(env, argv[0], dpiConn_type, (void **)&connRes))
         BADARG_EXCEPTION(0, "resource connection");
+
+    CHECK_HANDLE_VALID(connRes->conn, "Connection");
 
     if (enif_compare(argv[1], ATOM_TRUE) == 0)
         scrollable = 1;
@@ -232,6 +239,8 @@ DPI_NIF_FUN(conn_commit)
     if (!enif_get_resource(env, argv[0], dpiConn_type, (void **)&connRes))
         BADARG_EXCEPTION(0, "resource connection");
 
+    CHECK_HANDLE_VALID(connRes->conn, "Connection");
+
     RAISE_EXCEPTION_ON_DPI_ERROR(
         connRes->context, dpiConn_commit(connRes->conn));
 
@@ -248,6 +257,8 @@ DPI_NIF_FUN(conn_rollback)
     if (!enif_get_resource(env, argv[0], dpiConn_type, (void **)&connRes))
         BADARG_EXCEPTION(0, "resource connection");
 
+    CHECK_HANDLE_VALID(connRes->conn, "Connection");
+
     RAISE_EXCEPTION_ON_DPI_ERROR(
         connRes->context, dpiConn_rollback(connRes->conn));
 
@@ -263,6 +274,8 @@ DPI_NIF_FUN(conn_ping)
 
     if (!enif_get_resource(env, argv[0], dpiConn_type, (void **)&connRes))
         BADARG_EXCEPTION(0, "resource connection");
+
+    CHECK_HANDLE_VALID(connRes->conn, "Connection");
 
     RAISE_EXCEPTION_ON_DPI_ERROR(
         connRes->context, dpiConn_ping(connRes->conn));
@@ -302,14 +315,25 @@ DPI_NIF_FUN(conn_close)
             mode |= m;
         } while (enif_get_list_cell(env, tail, &head, &tail));
 
-    RAISE_EXCEPTION_ON_DPI_ERROR(
-        connRes->context,
-        dpiConn_close(
-            connRes->conn, mode,
-            tag.size > 0 ? (const char *)tag.data : NULL,
-            tag.size));
+    // Close and release the connection - do this before error checking to ensure cleanup
+    int closeResult = dpiConn_close(
+        connRes->conn, mode,
+        tag.size > 0 ? (const char *)tag.data : NULL,
+        tag.size);
+
+    if (connRes->conn != NULL) {
+        dpiConn_release(connRes->conn);
+        connRes->conn = NULL;
+    }
 
     RELEASE_RESOURCE(connRes, dpiConn);
+
+    // Check for errors after cleanup to avoid double-free
+    if (DPI_FAILURE == closeResult) {
+        dpiErrorInfo __err;
+        dpiContext_getError(connRes->context, &__err);
+        RAISE_EXCEPTION(dpiErrorInfoMap(env, __err));
+    }
 
     RETURNED_TRACE;
     return ATOM_OK;

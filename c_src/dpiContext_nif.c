@@ -5,6 +5,11 @@ ErlNifResourceType *dpiContext_type;
 void dpiContext_res_dtor(ErlNifEnv *env, void *resource)
 {
     CALL_TRACE;
+    dpiContext_res *contextRes = (dpiContext_res *)resource;
+    if (contextRes->context != NULL) {
+        dpiContext_destroy(contextRes->context);
+        contextRes->context = NULL;
+    }
     RETURNED_TRACE;
 }
 

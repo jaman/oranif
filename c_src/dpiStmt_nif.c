@@ -9,6 +9,11 @@ ErlNifResourceType *dpiStmt_type;
 void dpiStmt_res_dtor(ErlNifEnv *env, void *resource)
 {
     CALL_TRACE;
+    dpiStmt_res *stmtRes = (dpiStmt_res *)resource;
+    if (stmtRes->stmt != NULL) {
+        dpiStmt_release(stmtRes->stmt);
+        stmtRes->stmt = NULL;
+    }
     RETURNED_TRACE;
 }
 
@@ -21,6 +26,8 @@ DPI_NIF_FUN(stmt_execute)
 
     if (!enif_get_resource(env, argv[0], dpiStmt_type, (void **)&stmtRes))
         BADARG_EXCEPTION(0, "resource statement");
+
+    CHECK_HANDLE_VALID(stmtRes->stmt, "Statement");
 
     ERL_NIF_TERM head, tail;
 
@@ -57,6 +64,8 @@ DPI_NIF_FUN(stmt_executeMany)
 
     if (!enif_get_resource(env, argv[0], dpiStmt_type, (void **)&stmtRes))
         BADARG_EXCEPTION(0, "resource statement");
+
+    CHECK_HANDLE_VALID(stmtRes->stmt, "Statement");
 
     ERL_NIF_TERM head, tail;
 
@@ -98,6 +107,8 @@ DPI_NIF_FUN(stmt_fetch)
     if (!enif_get_resource(env, argv[0], dpiStmt_type, (void **)&stmtRes))
         BADARG_EXCEPTION(0, "resource statement");
 
+    CHECK_HANDLE_VALID(stmtRes->stmt, "Statement");
+
     RAISE_EXCEPTION_ON_DPI_ERROR(
         stmtRes->context,
         dpiStmt_fetch(stmtRes->stmt, &found, &bufferRowIndex));
@@ -129,6 +140,8 @@ DPI_NIF_FUN(stmt_fetchRows)
 
     if (!enif_get_resource(env, argv[0], dpiStmt_type, (void **)&stmtRes))
         BADARG_EXCEPTION(0, "resource statement");
+
+    CHECK_HANDLE_VALID(stmtRes->stmt, "Statement");
 
     if (!enif_get_uint(env, argv[1], &maxRows))
         BADARG_EXCEPTION(1, "uint maxRows");
@@ -167,6 +180,8 @@ DPI_NIF_FUN(stmt_getQueryValue)
 
     if (!enif_get_resource(env, argv[0], dpiStmt_type, (void **)&stmtRes))
         BADARG_EXCEPTION(0, "resource statement");
+
+    CHECK_HANDLE_VALID(stmtRes->stmt, "Statement");
 
     if (!enif_get_uint(env, argv[1], &pos))
         BADARG_EXCEPTION(1, "uint pos");
@@ -213,6 +228,8 @@ DPI_NIF_FUN(stmt_getQueryInfo)
 
     if (!enif_get_resource(env, argv[0], dpiStmt_type, (void **)&stmtRes))
         BADARG_EXCEPTION(0, "resource statement");
+
+    CHECK_HANDLE_VALID(stmtRes->stmt, "Statement");
 
     if (!enif_get_uint(env, argv[1], &pos))
         BADARG_EXCEPTION(1, "uint pos");
@@ -290,6 +307,8 @@ DPI_NIF_FUN(stmt_getNumQueryColumns)
     if (!enif_get_resource(env, argv[0], dpiStmt_type, (void **)&stmtRes))
         BADARG_EXCEPTION(0, "resource statement");
 
+    CHECK_HANDLE_VALID(stmtRes->stmt, "Statement");
+
     RAISE_EXCEPTION_ON_DPI_ERROR(
         stmtRes->context,
         dpiStmt_getNumQueryColumns(stmtRes->stmt, &numQueryColumns));
@@ -308,6 +327,9 @@ DPI_NIF_FUN(stmt_bindValueByPos)
 
     if (!enif_get_resource(env, argv[0], dpiStmt_type, (void **)&stmtRes))
         BADARG_EXCEPTION(0, "resource statement");
+
+    CHECK_HANDLE_VALID(stmtRes->stmt, "Statement");
+
     if (!enif_get_uint(env, argv[1], &pos))
         BADARG_EXCEPTION(1, "uint pos");
     if (!enif_get_resource(env, argv[3], dpiData_type, (void **)&dataRes))
@@ -335,6 +357,9 @@ DPI_NIF_FUN(stmt_bindValueByName)
 
     if (!enif_get_resource(env, argv[0], dpiStmt_type, (void **)&stmtRes))
         BADARG_EXCEPTION(0, "resource statement");
+
+    CHECK_HANDLE_VALID(stmtRes->stmt, "Statement");
+
     if (!enif_inspect_binary(env, argv[1], &binary))
         BADARG_EXCEPTION(1, "string/list name");
     if (!enif_get_resource(env, argv[3], dpiData_type, (void **)&dataRes))
@@ -363,6 +388,9 @@ DPI_NIF_FUN(stmt_bindByPos)
 
     if (!enif_get_resource(env, argv[0], dpiStmt_type, (void **)&stmtRes))
         BADARG_EXCEPTION(0, "resource statement");
+
+    CHECK_HANDLE_VALID(stmtRes->stmt, "Statement");
+
     if (!enif_get_uint(env, argv[1], &pos))
         BADARG_EXCEPTION(1, "uint pos");
     if (!enif_get_resource(env, argv[2], dpiVar_type, (void **)&varRes))
@@ -386,6 +414,9 @@ DPI_NIF_FUN(stmt_bindByName)
 
     if (!enif_get_resource(env, argv[0], dpiStmt_type, (void **)&stmtRes))
         BADARG_EXCEPTION(0, "resource statement");
+
+    CHECK_HANDLE_VALID(stmtRes->stmt, "Statement");
+
     if (!enif_inspect_binary(env, argv[1], &binary))
         BADARG_EXCEPTION(1, "string/list name");
     if (!enif_get_resource(env, argv[2], dpiVar_type, (void **)&varRes))
@@ -413,13 +444,21 @@ DPI_NIF_FUN(stmt_close)
     if (!enif_inspect_binary(env, argv[1], &tag))
         BADARG_EXCEPTION(1, "string tag");
 
-    RAISE_EXCEPTION_ON_DPI_ERROR_RESOURCE(
-        stmtRes->context,
-        dpiStmt_close(stmtRes->stmt, (const char *)tag.data, tag.size),
-        stmtRes, dpiStmt);
+    // Close and release the statement - do this before error checking to ensure cleanup
+    int closeResult = dpiStmt_close(stmtRes->stmt, (const char *)tag.data, tag.size);
+    if (stmtRes->stmt != NULL) {
         dpiStmt_release(stmtRes->stmt);
+        stmtRes->stmt = NULL;
+    }
 
     RELEASE_RESOURCE(stmtRes, dpiStmt);
+
+    // Check for errors after cleanup to avoid double-free
+    if (DPI_FAILURE == closeResult) {
+        dpiErrorInfo __err;
+        dpiContext_getError(stmtRes->context, &__err);
+        RAISE_EXCEPTION(dpiErrorInfoMap(env, __err));
+    }
 
     RETURNED_TRACE;
     return ATOM_OK;
@@ -434,6 +473,8 @@ DPI_NIF_FUN(stmt_getInfo)
 
     if (!enif_get_resource(env, argv[0], dpiStmt_type, (void **)&stmtRes))
         BADARG_EXCEPTION(0, "resource statement");
+
+    CHECK_HANDLE_VALID(stmtRes->stmt, "Statement");
 
     RAISE_EXCEPTION_ON_DPI_ERROR_RESOURCE(
         stmtRes->context, dpiStmt_getInfo(stmtRes->stmt, &info),
@@ -531,6 +572,9 @@ DPI_NIF_FUN(stmt_define)
 
     if (!enif_get_resource(env, argv[0], dpiStmt_type, (void **)&stmtRes))
         BADARG_EXCEPTION(0, "resource statement");
+
+    CHECK_HANDLE_VALID(stmtRes->stmt, "Statement");
+
     if (!enif_get_uint(env, argv[1], &pos))
         BADARG_EXCEPTION(1, "uint pos");
     if (!enif_get_resource(env, argv[2], dpiVar_type, (void **)&varRes))
@@ -556,6 +600,8 @@ DPI_NIF_FUN(stmt_defineValue)
 
     if (!enif_get_resource(env, argv[0], dpiStmt_type, (void **)&stmtRes))
         BADARG_EXCEPTION(0, "resource statement");
+
+    CHECK_HANDLE_VALID(stmtRes->stmt, "Statement");
 
     if (!enif_get_uint(env, argv[1], &pos))
         BADARG_EXCEPTION(1, "uint pos");
@@ -591,6 +637,9 @@ DPI_NIF_FUN(stmt_setFetchArraySize)
 
     if (!enif_get_resource(env, argv[0], dpiStmt_type, (void **)&stmtRes))
         BADARG_EXCEPTION(0, "resource statement");
+
+    CHECK_HANDLE_VALID(stmtRes->stmt, "Statement");
+
     if (!enif_get_uint(env, argv[1], &arraySize))
         BADARG_EXCEPTION(1, "uint arraySize");
 

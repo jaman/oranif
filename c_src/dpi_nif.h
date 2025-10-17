@@ -153,6 +153,11 @@ extern ERL_NIF_TERM ATOM_ENOMEM;
         ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
 extern ERL_NIF_TERM dpiErrorInfoMap(ErlNifEnv *, dpiErrorInfo);
+#define CHECK_HANDLE_VALID(_handle, _name) \
+    if ((_handle) == NULL) { \
+        RAISE_STR_EXCEPTION(_name " handle is invalid (possibly due to connection loss)"); \
+    }
+
 #define RAISE_EXCEPTION_ON_DPI_ERROR(_ctx, _exprn)    \
     if (DPI_FAILURE == (_exprn))                      \
     {                                                 \
