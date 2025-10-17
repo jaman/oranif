@@ -496,18 +496,22 @@ DPI_NIF_FUN(data_release)
 
     if (enif_get_resource(env, argv[0], dpiData_type, (void **)&res.dataRes))
     {
-        // Nothing to do - let Erlang GC handle the resource lifecycle
+        // Clear the environment  - will be freed by destructor anyway
+        // Release the NIF resource
+        RELEASE_RESOURCE(res.dataRes, dpiData);
     }
     else if (enif_get_resource(
                  env, argv[0], dpiDataPtr_type, (void **)&res.dataPtrRes))
     {
         if (res.dataPtrRes->stmtRes)
         {
-            // Don't release stmtRes - it has its own Erlang term and will be GC'd independently
+            // stmtRes has its own Erlang term and will be GC'd independently
             res.dataPtrRes->stmtRes = NULL;
         }
         res.dataPtrRes->dpiDataPtr = NULL;
-        // Don't call RELEASE_RESOURCE - let Erlang GC handle the resource lifecycle
+        // Release the NIF resource - but only if it's a query value (not part of a var)
+        if (res.dataPtrRes->isQueryValue == 1)
+            RELEASE_RESOURCE(res.dataPtrRes, dpiDataPtr);
     }
     else
         BADARG_EXCEPTION(0, "resource data");

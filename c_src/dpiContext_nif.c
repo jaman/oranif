@@ -66,8 +66,8 @@ DPI_NIF_FUN(context_destroy)
 
     contextRes->context = NULL;
 
-    // Don't call RELEASE_RESOURCE - let Erlang GC handle the resource lifecycle
-    // The destructor will be called when Erlang GCs the term
+    // Release the NIF resource so destructor won't try to free it again
+    RELEASE_RESOURCE(contextRes, dpiContext);
 
     RETURNED_TRACE;
     return ATOM_OK;

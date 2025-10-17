@@ -452,8 +452,8 @@ DPI_NIF_FUN(stmt_close)
         stmtRes->stmt = NULL;
     }
 
-    // Don't call RELEASE_RESOURCE - let Erlang GC handle the resource lifecycle
-    // The destructor will be called when Erlang GCs the term
+    // Release the NIF resource so destructor won't try to free it again
+    RELEASE_RESOURCE(stmtRes, dpiStmt);
 
     // Check for errors after cleanup
     if (DPI_FAILURE == closeResult) {
