@@ -42,6 +42,7 @@ DPI_NIF_FUN(data_ctor)
     data->env = enif_alloc_env();
 
     ERL_NIF_TERM dpiDataRes = enif_make_resource(env, data);
+    enif_release_resource(data);  // Release C reference, Erlang term holds its own reference
 
     RETURNED_TRACE;
     return dpiDataRes;
@@ -367,14 +368,18 @@ DPI_NIF_FUN(data_get)
     case DPI_NATIVE_TYPE_STMT:
     {
         dpiStmt_res *stmtRes = (dpiStmt_res *)dataRes->stmtRes;
+        int needsRelease = 0;
         if (!stmtRes)
         {
             // first time
             ALLOC_RESOURCE(stmtRes, dpiStmt);
             dataRes->stmtRes = stmtRes;
+            needsRelease = 1;
         }
         stmtRes->stmt = data->value.asStmt;
         dataRet = enif_make_resource(env, stmtRes);
+        if (needsRelease)
+            enif_release_resource(stmtRes);  // Release C reference, Erlang term holds its own reference
     }
     break;
     case DPI_NATIVE_TYPE_ROWID:

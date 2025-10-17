@@ -93,6 +93,7 @@ DPI_NIF_FUN(conn_create)
     connRes->context = contextRes->context;
 
     ERL_NIF_TERM connResTerm = enif_make_resource(env, connRes);
+    enif_release_resource(connRes);  // Release C reference, Erlang term holds its own reference
 
     RETURNED_TRACE;
     return connResTerm;
@@ -137,6 +138,7 @@ DPI_NIF_FUN(conn_prepareStmt)
     stmtRes->context = connRes->context;
 
     ERL_NIF_TERM stmtResTerm = enif_make_resource(env, stmtRes);
+    enif_release_resource(stmtRes);  // Release C reference, Erlang term holds its own reference
 
     RETURNED_TRACE;
     return stmtResTerm;
@@ -195,6 +197,7 @@ DPI_NIF_FUN(conn_newVar)
     varRes->context = connRes->context;
 
     ERL_NIF_TERM varResTerm = enif_make_resource(env, varRes);
+    enif_release_resource(varRes);  // Release C reference, Erlang term holds its own reference
 
     ERL_NIF_TERM dataList = enif_make_list(env, 0);
 
@@ -219,6 +222,7 @@ DPI_NIF_FUN(conn_newVar)
         dataRes->dpiDataPtr = data + i;
         dataRes->type = nativeTypeNum;
         ERL_NIF_TERM dataResTerm = enif_make_resource(env, dataRes);
+        enif_release_resource(dataRes);  // Release C reference, Erlang term holds its own reference
         dataList = enif_make_list_cell(env, dataResTerm, dataList);
     }
     ERL_NIF_TERM ret = enif_make_new_map(env);

@@ -46,6 +46,7 @@ DPI_NIF_FUN(context_create)
     }
 
     ERL_NIF_TERM contextResTerm = enif_make_resource(env, contextRes);
+    enif_release_resource(contextRes);  // Release C reference, Erlang term holds its own reference
 
     RETURNED_TRACE;
     return contextResTerm;

@@ -202,6 +202,7 @@ DPI_NIF_FUN(stmt_getQueryValue)
 
     data->type = nativeTypeNum;
     ERL_NIF_TERM dpiDataRes = enif_make_resource(env, data);
+    enif_release_resource(data);  // Release C reference, Erlang term holds its own reference
 
     ERL_NIF_TERM nativeTypeNumAtom;
     DPI_NATIVE_TYPE_NUM_TO_ATOM(nativeTypeNum, nativeTypeNumAtom);
