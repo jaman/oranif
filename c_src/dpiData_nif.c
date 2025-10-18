@@ -42,7 +42,6 @@ DPI_NIF_FUN(data_ctor)
     data->env = enif_alloc_env();
 
     ERL_NIF_TERM dpiDataRes = enif_make_resource(env, data);
-    enif_release_resource(data);  // Release C reference, Erlang term holds its own reference
 
     RETURNED_TRACE;
     return dpiDataRes;
@@ -378,8 +377,6 @@ DPI_NIF_FUN(data_get)
         }
         stmtRes->stmt = data->value.asStmt;
         dataRet = enif_make_resource(env, stmtRes);
-        if (needsRelease)
-            enif_release_resource(stmtRes);  // Release C reference, Erlang term holds its own reference
     }
     break;
     case DPI_NATIVE_TYPE_ROWID:
@@ -496,9 +493,7 @@ DPI_NIF_FUN(data_release)
 
     if (enif_get_resource(env, argv[0], dpiData_type, (void **)&res.dataRes))
     {
-        // Clear the environment  - will be freed by destructor anyway
-        // Release the NIF resource
-        RELEASE_RESOURCE(res.dataRes, dpiData);
+        // Nothing to do - let Erlang GC call the destructor
     }
     else if (enif_get_resource(
                  env, argv[0], dpiDataPtr_type, (void **)&res.dataPtrRes))
@@ -509,9 +504,7 @@ DPI_NIF_FUN(data_release)
             res.dataPtrRes->stmtRes = NULL;
         }
         res.dataPtrRes->dpiDataPtr = NULL;
-        // Release the NIF resource - but only if it's a query value (not part of a var)
-        if (res.dataPtrRes->isQueryValue == 1)
-            RELEASE_RESOURCE(res.dataPtrRes, dpiDataPtr);
+        // Don't call RELEASE_RESOURCE - let Erlang GC call the destructor
     }
     else
         BADARG_EXCEPTION(0, "resource data");

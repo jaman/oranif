@@ -76,8 +76,8 @@ DPI_NIF_FUN(var_release)
     // and will be GC'd independently, so we just clear our internal tracking
     vRes->head = NULL;
 
-    // Release the NIF resource so destructor won't try to free it again
-    RELEASE_RESOURCE(vRes, dpiVar);
+    // Don't call RELEASE_RESOURCE - let Erlang GC call the destructor
+    // The destructor checks for NULL and won't double-free
 
     RETURNED_TRACE;
     return ATOM_OK;

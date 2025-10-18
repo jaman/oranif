@@ -46,7 +46,6 @@ DPI_NIF_FUN(context_create)
     }
 
     ERL_NIF_TERM contextResTerm = enif_make_resource(env, contextRes);
-    enif_release_resource(contextRes);  // Release C reference, Erlang term holds its own reference
 
     RETURNED_TRACE;
     return contextResTerm;
@@ -66,8 +65,8 @@ DPI_NIF_FUN(context_destroy)
 
     contextRes->context = NULL;
 
-    // Release the NIF resource so destructor won't try to free it again
-    RELEASE_RESOURCE(contextRes, dpiContext);
+    // Don't call RELEASE_RESOURCE - let Erlang GC call the destructor
+    // The destructor checks for NULL and won't double-free
 
     RETURNED_TRACE;
     return ATOM_OK;
