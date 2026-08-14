@@ -6,6 +6,7 @@
 % see: https://oracle.github.io/odpi/doc/public_functions/dpiConn.html
 
 -nifs({dpiConn, [
+    {conn_breakExecution, [reference]},
     {conn_close, [reference, list, binary]},
     {conn_commit, [reference]},
     {conn_create, [reference, binary, binary, binary, {map, null}, {map, null}]},

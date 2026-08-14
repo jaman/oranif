@@ -19,6 +19,10 @@
     end)()
 ).
 
+-define(SLOW_QUERY, <<
+    "select count(*) from all_objects a, all_objects b, all_objects c"
+>>).
+
 -define(BAD_INT, -16#FFFFFFFFFFFFFFFF1).
 -define(BAD_FLOAT, notEvenAFloatAtAll).
 -define(BAD_REF, make_ref()).
@@ -328,7 +332,57 @@ connPing(#{context := Context, session := Conn} = TestCtx) ->
     ),
     Result = dpiCall(TestCtx, conn_ping, [Conn]),
     ?assertEqual(ok, Result).
-  
+
+connBreakExecution(#{context := Context} = TestCtx) ->
+    ?ASSERT_EX(
+        "Unable to retrieve resource connection from arg0",
+        dpiCall(TestCtx, conn_breakExecution, [?BAD_REF])
+    ),
+    % fails due to the reference being wrong
+    ?ASSERT_EX(
+        "Unable to retrieve resource connection from arg0",
+        dpiCall(TestCtx, conn_breakExecution, [Context])
+    ),
+    #{tns := Tns, user := User, password := Password} = getConfig(),
+    Conn = dpiCall(
+        TestCtx, conn_create,
+        [
+            Context, User, Password, Tns,
+            #{encoding => "AL32UTF8", nencoding => "AL32UTF8"}, #{}
+        ]
+    ),
+    Self = self(),
+    Runner = spawn(fun() -> slowQuery(TestCtx, Conn, Self) end),
+    receive {Runner, executing} -> ok
+    after 5000 -> error(slow_query_never_started)
+    end,
+    ?assertEqual(
+        {oracle_error, 1013}, breakUntilCancelled(TestCtx, Conn, Runner, 30)
+    ),
+    dpiCall(TestCtx, conn_close, [Conn, [], <<>>]).
+
+slowQuery(TestCtx, Conn, Reply) ->
+    Stmt = dpiCall(
+        TestCtx, conn_prepareStmt, [Conn, false, ?SLOW_QUERY, <<>>]
+    ),
+    Reply ! {self(), executing},
+    Outcome =
+        try dpiCall(TestCtx, stmt_execute, [Stmt, []]) of
+            Columns -> {completed, Columns}
+        catch
+            error:{error, _File, _Line, #{code := Code}} -> {oracle_error, Code};
+            Class:Reason -> {Class, Reason}
+        end,
+    catch dpiCall(TestCtx, stmt_close, [Stmt, <<>>]),
+    Reply ! {self(), Outcome}.
+
+breakUntilCancelled(_TestCtx, _Conn, _Runner, 0) -> break_had_no_effect;
+breakUntilCancelled(TestCtx, Conn, Runner, Attempts) ->
+    ?assertEqual(ok, dpiCall(TestCtx, conn_breakExecution, [Conn])),
+    receive {Runner, Outcome} -> Outcome
+    after 1000 -> breakUntilCancelled(TestCtx, Conn, Runner, Attempts - 1)
+    end.
+
 connClose(#{context := Context, session := Conn} = TestCtx) ->
     ?ASSERT_EX(
         "Unable to retrieve resource connection from arg0",
@@ -1748,6 +1802,7 @@ getConfig() ->
     ?F(connCommit),
     ?F(connRollback),
     ?F(connPing),
+    ?F(connBreakExecution),
     ?F(connClose),
     ?F(connGetServerVersion),
     ?F(connSetClientIdentifier),

@@ -11,6 +11,25 @@ ERL_NIF_TERM ATOM_nencoding = 0;
 
 ErlNifResourceType *dpiConn_type;
 
+static dpiConn *detachConn(dpiConn_res *connRes)
+{
+    enif_mutex_lock(connRes->lock);
+    dpiConn *conn = connRes->conn;
+    connRes->conn = NULL;
+    enif_mutex_unlock(connRes->lock);
+    return conn;
+}
+
+static dpiConn *acquireConn(dpiConn_res *connRes)
+{
+    enif_mutex_lock(connRes->lock);
+    dpiConn *conn = connRes->conn;
+    if (conn != NULL && DPI_FAILURE == dpiConn_addRef(conn))
+        conn = NULL;
+    enif_mutex_unlock(connRes->lock);
+    return conn;
+}
+
 void dpiConn_res_dtor(ErlNifEnv *env, void *resource)
 {
     CALL_TRACE;
@@ -18,6 +37,10 @@ void dpiConn_res_dtor(ErlNifEnv *env, void *resource)
     if (connRes->conn != NULL) {
         dpiConn_release(connRes->conn);
         connRes->conn = NULL;
+    }
+    if (connRes->lock != NULL) {
+        enif_mutex_destroy(connRes->lock);
+        connRes->lock = NULL;
     }
     RETURNED_TRACE;
 }
@@ -44,6 +67,8 @@ DPI_NIF_FUN(conn_create)
     RAISE_EXCEPTION_ON_DPI_ERROR(
         contextRes->context,
         dpiContext_initCommonCreateParams(contextRes->context, &commonParams));
+
+    commonParams.createMode |= DPI_MODE_CREATE_THREADED;
 
     if (commonParamsMapSize > 0)
     {
@@ -78,6 +103,15 @@ DPI_NIF_FUN(conn_create)
     dpiConn_res *connRes;
     ALLOC_RESOURCE(connRes, dpiConn);
 
+    connRes->conn = NULL;
+    connRes->context = contextRes->context;
+    connRes->lock = enif_mutex_create("dpiConn");
+    if (connRes->lock == NULL)
+    {
+        RELEASE_RESOURCE(connRes, dpiConn);
+        RAISE_EXCEPTION(ATOM_ENOMEM);
+    }
+
     RAISE_EXCEPTION_ON_DPI_ERROR_RESOURCE(
         contextRes->context,
         dpiConn_create(
@@ -88,9 +122,6 @@ DPI_NIF_FUN(conn_create)
             NULL, // TODO implement connCreateParams
             &connRes->conn),
         connRes, dpiConn);
-
-    // Save context into connection for access from dpiError
-    connRes->context = contextRes->context;
 
     ERL_NIF_TERM connResTerm = enif_make_resource(env, connRes);
 
@@ -284,6 +315,32 @@ DPI_NIF_FUN(conn_ping)
     return ATOM_OK;
 }
 
+DPI_NIF_FUN(conn_breakExecution)
+{
+    CHECK_ARGCOUNT(1);
+
+    dpiConn_res *connRes;
+
+    if (!enif_get_resource(env, argv[0], dpiConn_type, (void **)&connRes))
+        BADARG_EXCEPTION(0, "resource connection");
+
+    dpiConn *conn = acquireConn(connRes);
+    CHECK_HANDLE_VALID(conn, "Connection");
+
+    int breakResult = dpiConn_breakExecution(conn);
+
+    dpiConn_release(conn);
+
+    if (DPI_FAILURE == breakResult) {
+        dpiErrorInfo __err;
+        dpiContext_getError(connRes->context, &__err);
+        RAISE_EXCEPTION(dpiErrorInfoMap(env, __err));
+    }
+
+    RETURNED_TRACE;
+    return ATOM_OK;
+}
+
 DPI_NIF_FUN(conn_close)
 {
     CHECK_ARGCOUNT(3);
@@ -316,15 +373,17 @@ DPI_NIF_FUN(conn_close)
         } while (enif_get_list_cell(env, tail, &head, &tail));
 
     // Close and release the connection - do this before error checking to ensure cleanup
+    dpiConn *conn = detachConn(connRes);
+    if (conn == NULL)
+        RAISE_STR_EXCEPTION(
+            "Connection handle is invalid (possibly due to connection loss)");
+
     int closeResult = dpiConn_close(
-        connRes->conn, mode,
+        conn, mode,
         tag.size > 0 ? (const char *)tag.data : NULL,
         tag.size);
 
-    if (connRes->conn != NULL) {
-        dpiConn_release(connRes->conn);
-        connRes->conn = NULL;
-    }
+    dpiConn_release(conn);
 
     // Don't call RELEASE_RESOURCE - let Erlang GC call the destructor
     // The destructor checks for NULL and won't double-free

@@ -8,11 +8,13 @@ typedef struct
 {
     dpiConn *conn;
     dpiContext *context;
+    ErlNifMutex *lock;
 } dpiConn_res;
 
 extern ErlNifResourceType *dpiConn_type;
 extern void dpiConn_res_dtor(ErlNifEnv *env, void *resource);
 
+extern DPI_NIF_FUN(conn_breakExecution);
 extern DPI_NIF_FUN(conn_close);
 extern DPI_NIF_FUN(conn_commit);
 extern DPI_NIF_FUN(conn_create);
@@ -24,7 +26,8 @@ extern DPI_NIF_FUN(conn_rollback);
 extern DPI_NIF_FUN(conn_setClientIdentifier);
 
 #define DPICONN_NIFS                       \
-    DEF_NIF(conn_close, 3),                \
+    DEF_NIF(conn_breakExecution, 1),       \
+        DEF_NIF(conn_close, 3),            \
         DEF_NIF(conn_commit, 1),           \
         IOB_NIF(conn_create, 6),           \
         DEF_NIF(conn_getServerVersion, 1), \

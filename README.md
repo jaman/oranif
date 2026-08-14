@@ -47,6 +47,37 @@ lcov --directory . --capture --output-file coverage.info
 lcov --list coverage.info
 ```
 
+## Cancelling a statement that is already running
+
+`dpi:conn_breakExecution(Connection) -> ok` issues `OCIBreak` on the connection,
+which asks the server to abandon whatever that session is currently executing.
+
+```erlang
+Conn = dpi:conn_create(Ctx, User, Password, Tns, #{}, #{}),
+Stmt = dpi:conn_prepareStmt(Conn, false, <<"select ... ">>, <<>>),
+Runner = spawn(fun() -> dpi:stmt_execute(Stmt, []) end),
+%% from any other process
+ok = dpi:conn_breakExecution(Conn).
+```
+
+Rules for the caller:
+
+- Call it from a process other than the one blocked in `stmt_execute/2`,
+  `stmt_fetch/1` or `stmt_fetchRows/2`. Those run on dirty IO schedulers and
+  will not return until the break arrives; `conn_breakExecution/1` runs on a
+  normal scheduler so it is not queued behind them.
+- The blocked call raises `ORA-01013: user requested cancel of current
+  operation` (`#{code := 1013}`) once the server acts on the break.
+- Roll the transaction back before reusing the connection. The break cancels
+  the statement, not the transaction.
+- It is safe to call concurrently with `conn_close/3` on the same connection.
+  Once the connection has been closed, `conn_breakExecution/1` raises
+  `"Connection handle is invalid (possibly due to connection loss)"` instead of
+  reaching a released handle.
+
+Connections are created with `DPI_MODE_CREATE_THREADED`, which is what makes
+`OCIBreak` from another scheduler thread legal.
+
 ## Testing
 There are some eunit tests which can be executed through `rebar3 do clean, compile, eunit` (Oracle Server connect info **MUST** be supplied through `tests/connect.config` first).
 
