@@ -162,7 +162,7 @@ DPI_NIF_FUN(data_setInt64)
     dpiDataPtr_res *dataPtr;
     dpiData *data;
 
-    int64_t amount;
+    ErlNifSInt64 amount;
 
     if (enif_get_resource(env, argv[0], dpiDataPtr_type, (void **)&dataPtr))
         data = dataPtr->dpiDataPtr;
@@ -367,13 +367,11 @@ DPI_NIF_FUN(data_get)
     case DPI_NATIVE_TYPE_STMT:
     {
         dpiStmt_res *stmtRes = (dpiStmt_res *)dataRes->stmtRes;
-        int needsRelease = 0;
         if (!stmtRes)
         {
             // first time
             ALLOC_RESOURCE(stmtRes, dpiStmt);
             dataRes->stmtRes = stmtRes;
-            needsRelease = 1;
         }
         stmtRes->stmt = data->value.asStmt;
         dataRet = enif_make_resource(env, stmtRes);
